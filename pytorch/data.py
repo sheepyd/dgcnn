@@ -13,6 +13,7 @@ import sys
 import glob
 import h5py
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 
 
@@ -61,6 +62,21 @@ def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.02):
     return pointcloud
 
 
+def rotate_pointcloud_z(pointcloud):
+    """Randomly rotate the point cloud around Z-axis."""
+    theta = np.random.uniform(0, 2*np.pi)
+    rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
+                                [np.sin(theta),  np.cos(theta), 0],
+                                [0,              0,             1]], dtype=np.float32)
+    return pointcloud @ rotation_matrix.T
+
+
+def scale_pointcloud(pointcloud, scale_low=0.9, scale_high=1.1):
+    """Apply isotropic scaling."""
+    scale = np.random.uniform(scale_low, scale_high)
+    return pointcloud * scale
+
+
 class ModelNet40(Dataset):
     def __init__(self, num_points, partition='train'):
         self.data, self.label = load_data(partition)
@@ -77,6 +93,95 @@ class ModelNet40(Dataset):
 
     def __len__(self):
         return self.data.shape[0]
+
+
+class TomatoDataset(Dataset):
+    """Torch-ready tomato scans for semantic segmentation."""
+    def __init__(self, root='dataset/tomato', split='train', num_points=2048, augment=True):
+        super().__init__()
+        self.root = os.path.join(root, split)
+        self.num_points = num_points
+        self.split = split
+        self.augment = augment and split == 'train'
+        pattern = os.path.join(self.root, '**', '*_inst_nostuff.pth')
+        self.files = sorted(glob.glob(pattern, recursive=True))
+        if len(self.files) == 0:
+            raise FileNotFoundError('No tomato scans found under %s' % pattern)
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        coords, _, semantic, _ = self._load_file(self.files[idx])
+        points = self._to_numpy(coords).astype(np.float32)
+        labels = self._to_numpy(semantic).astype(np.int64).reshape(-1)
+        points, labels = self._sample(points, labels)
+        if self.augment:
+            points = rotate_pointcloud_z(points)
+            points = scale_pointcloud(points)
+            points = jitter_pointcloud(points)
+            perm = np.random.permutation(points.shape[0])
+            points = points[perm]
+            labels = labels[perm]
+        return points, labels
+
+    def _sample(self, points, labels):
+        n_points = points.shape[0]
+        if n_points >= self.num_points:
+            choice = np.random.choice(n_points, self.num_points, replace=False)
+        else:
+            choice = np.random.choice(n_points, self.num_points, replace=True)
+        return points[choice], labels[choice]
+
+    @staticmethod
+    def _load_file(path):
+        try:
+            return torch.load(path, map_location='cpu', weights_only=False)
+        except TypeError:
+            return torch.load(path, map_location='cpu')
+
+    @staticmethod
+    def _to_numpy(array):
+        if isinstance(array, torch.Tensor):
+            return array.cpu().numpy()
+        return np.asarray(array)
+
+
+class TomatoInferenceDataset(Dataset):
+    """Tomato scans without labels (e.g., test split)."""
+    def __init__(self, root='dataset/tomato', split='test'):
+        super().__init__()
+        self.root = os.path.join(root, split)
+        pattern = os.path.join(self.root, '**', '*_inst_nostuff.pth')
+        self.files = sorted(glob.glob(pattern, recursive=True))
+        if len(self.files) == 0:
+            raise FileNotFoundError('No tomato scans found under %s' % pattern)
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        sample = self._load_file(self.files[idx])
+        if isinstance(sample, (tuple, list)):
+            coords = sample[0]
+        else:
+            coords = sample
+        points = self._to_numpy(coords).astype(np.float32)
+        rel_path = os.path.relpath(self.files[idx], self.root)
+        return points, rel_path
+
+    @staticmethod
+    def _load_file(path):
+        try:
+            return torch.load(path, map_location='cpu', weights_only=False)
+        except TypeError:
+            return torch.load(path, map_location='cpu')
+
+    @staticmethod
+    def _to_numpy(array):
+        if isinstance(array, torch.Tensor):
+            return array.cpu().numpy()
+        return np.asarray(array)
 
 
 if __name__ == '__main__':
