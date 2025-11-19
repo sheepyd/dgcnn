@@ -13,6 +13,7 @@ pytorch/checkpoints/
 # Data
 pytorch/dataset/
 pytorch/data/
+tensorflow/data/
 
 # IDE
 .idea/
@@ -21,3 +22,7 @@ pytorch/data/
 
 # Training outputs
 pytorch/training_output.log
+*.npz
+
+# OS
+.DS_Store

@@ -1,0 +1,46 @@
+# DGCNN Tomato Segmentation Configuration
+# Usage: python main.py --config configs/tomato_seg.yaml
+
+# Experiment settings
+exp_name: tomato_seg_baseline
+model: dgcnn
+dataset: tomato
+task: seg
+
+# Training parameters
+batch_size: 8
+test_batch_size: 8
+epochs: 200
+use_sgd: true
+lr: 0.001
+momentum: 0.9
+dropout: 0.5
+
+# Model architecture
+num_points: 2048
+emb_dims: 1024
+k: 30
+
+# Dataset settings
+tomato_root: dataset/tomato
+num_classes: 3
+ignore_label: -1  # Set to -1 to not ignore any label, or 0 to ignore earth class
+
+# Class weights for handling imbalance (optional)
+# Recommended: [0.23, 2.52, 0.25] for [earth, stem, leaf]
+# Set to null to disable
+class_weights: null
+
+# System settings
+no_cuda: false
+seed: 1
+num_workers: 0  # Set to 0 to avoid multiprocessing issues
+
+# Evaluation settings
+eval: false
+model_path: ''
+
+# Prediction settings
+predict: false
+predict_split: test
+prediction_dir: predictions

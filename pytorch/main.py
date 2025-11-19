@@ -12,6 +12,7 @@ from __future__ import print_function
 import os
 import sys
 import argparse
+import yaml
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,6 +25,32 @@ from torch.utils.data import DataLoader
 from util import cal_loss, IOStream
 import sklearn.metrics as metrics
 from tqdm import tqdm
+
+
+def load_config(config_path):
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def merge_config_with_args(config, args):
+    """Merge YAML config with command line arguments. Command line args take precedence."""
+    if config is None:
+        return args
+    
+    # Convert args to dict
+    args_dict = vars(args)
+    
+    # Update with config values (only if not explicitly set in command line)
+    for key, value in config.items():
+        # Skip if the argument was explicitly set in command line
+        # We check if it differs from the default value
+        if key in args_dict:
+            args_dict[key] = value
+    
+    # Convert back to namespace
+    return argparse.Namespace(**args_dict)
 
 
 def _init_():
@@ -369,6 +396,8 @@ def predict_segmentation(args, io):
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description='Point Cloud Recognition')
+    parser.add_argument('--config', type=str, default=None,
+                        help='Path to YAML config file. If provided, values from config will be used as defaults.')
     parser.add_argument('--exp_name', type=str, default='exp', metavar='N',
                         help='Name of the experiment')
     parser.add_argument('--model', type=str, default='dgcnn', metavar='N',
@@ -422,7 +451,30 @@ if __name__ == "__main__":
                         help='Directory to store prediction files')
     parser.add_argument('--class_weights', type=float, nargs='+', default=None,
                         help='Class weights for loss function (e.g., --class_weights 0.23 2.52 0.25)')
+    
+    # Parse command line arguments
     args = parser.parse_args()
+    
+    # Load config file if provided
+    if args.config is not None:
+        if not os.path.exists(args.config):
+            raise FileNotFoundError(f'Config file not found: {args.config}')
+        print(f'Loading config from: {args.config}')
+        config = load_config(args.config)
+        
+        # Merge config with command line args
+        # Command line args will override config values
+        for key, value in config.items():
+            if hasattr(args, key):
+                # Only use config value if command line arg is at default
+                default_value = parser.get_default(key)
+                current_value = getattr(args, key)
+                if current_value == default_value:
+                    setattr(args, key, value)
+            else:
+                setattr(args, key, value)
+        
+        print(f'Config loaded and merged with command line arguments')
 
     _init_()
 

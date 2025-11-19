@@ -1,0 +1,38 @@
+# High-resolution training with 4096 points
+# Requires more GPU memory but provides better detail
+
+exp_name: tomato_seg_4096
+model: dgcnn
+dataset: tomato
+task: seg
+
+# Training parameters
+batch_size: 2  # Very small batch due to memory constraints
+test_batch_size: 2
+epochs: 100
+use_sgd: true
+lr: 0.001
+momentum: 0.9
+dropout: 0.5
+
+# Model architecture - high resolution
+num_points: 4096  # Double the standard resolution
+emb_dims: 1024
+k: 30
+
+# Dataset settings
+tomato_root: dataset/tomato
+num_classes: 3
+ignore_label: -1
+
+# Class weights
+class_weights: [0.23, 2.52, 0.25]
+
+# System settings
+no_cuda: false
+seed: 1
+num_workers: 0
+
+eval: false
+model_path: ''
+predict: false
